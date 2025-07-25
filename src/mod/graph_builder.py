@@ -1,7 +1,7 @@
 from typing import TypedDict, List, Dict, Optional
 from langgraph.graph import StateGraph, START, END
 from graph_utils import analyze_schema, select_relevant_tables, generate_sql, execute_query, format_results, explain_query
-from mod.prompt import PromptManager
+from prompts import PromptManager
 from db_connect import DatabaseConnection
 from llm import TogetherLLM
 

@@ -1,13 +1,14 @@
 ipykernel
 pandas
 dotenv
+python-dotenv
 pymysql
 psycopg2-binary 
 pyodbc
 sqlalchemy
 langchain
 langsmith
-python-dotenv
+langgraph
 langchain-community
 langchain-core
 langchain-openai
@@ -17,4 +18,3 @@ langchain_experimental
 langchain-together
 together
 streamlit
-

@@ -6,7 +6,7 @@ from sqlalchemy import text
 from langchain.chains import LLMChain
 from langchain_together import TogetherLLM
 from db_connect import DatabaseConnection
-from mod.prompt import PromptManager
+from prompts import PromptManager
 from graph_builder import NL2SQLState
 
 
