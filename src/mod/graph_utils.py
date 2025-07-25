@@ -1,50 +1,14 @@
 import re
 import pandas as pd
-from typing import Dict, List
-from typing_extensions import TypedDict
+from typing import List
 from pydantic import BaseModel, Field, validator, root_validator
 from sqlalchemy import text
 from langchain.chains import LLMChain
 from langchain_together import TogetherLLM
-from langgraph.graph import StateGraph, START, END
 from db_connect import DatabaseConnection
-from prompts import PromptManager
+from mod.prompt import PromptManager
+from graph_builder import NL2SQLState
 
-
-class NL2SQLState(TypedDict):
-    """State for the NL2SQL workflow"""
-    question: str
-    db_schema: str
-    relevant_tables: List[str]
-    sql_query: str
-    query_results: List[Dict]
-    formatted_response: str
-    explanation: str
-    error_message: str
-    # context: str
-
-def build_workflow_graph() -> StateGraph:
-    """Setup the LangGraph workflow for NL2SQL processing"""
-    workflow = StateGraph(NL2SQLState)
-    
-    # Add workflow nodes
-    workflow.add_node("analyze_schema", analyze_schema)
-    workflow.add_node("select_relevant_tables", select_relevant_tables)
-    workflow.add_node("generate_sql", generate_sql)
-    workflow.add_node("execute_query", execute_query)
-    workflow.add_node("format_results", format_results)
-    workflow.add_node("explain_query", explain_query)
-    
-    # Define workflow edges
-    workflow.add_edge(START, "analyze_schema")
-    workflow.add_edge("analyze_schema", "select_relevant_tables")
-    workflow.add_edge("select_relevant_tables", "generate_sql")
-    workflow.add_edge("generate_sql", "execute_query")
-    workflow.add_edge("execute_query", "format_results")
-    workflow.add_edge("format_results", "explain_query")
-    workflow.add_edge("explain_query", END)
-    
-    return workflow.compile()
 
 def analyze_schema(state: NL2SQLState, 
                   db_connection: DatabaseConnection) -> NL2SQLState:
@@ -129,7 +93,6 @@ def generate_sql(state: NL2SQLState,
             question=state["question"],
             schema=state["db_schema"],
             tables=", ".join(state["relevant_tables"])
-            # , context=state["context"]
         )
         state["sql_query"] = response.sql_query
         return state

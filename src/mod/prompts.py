@@ -24,10 +24,8 @@ class NL2SQLPrompts:
         3. Relationships between tables that might be needed for joins
         4. Foreign key relationships
 
-        Return only the table names as a comma-separated list, nothing else.
-        If no tables seem relevant, return "NO_TABLES_FOUND".
-
-        Example format: table1, table2, table3
+        You must return a structured response with the relevant table names.
+        If no tables seem relevant, return an empty list.
 
         Relevant Tables:"""
         
@@ -51,9 +49,6 @@ class NL2SQLPrompts:
 
         User Question: {question}
 
-        Previous Conversation Context (if any):
-        {context}
-
         IMPORTANT RULES:
         1. Generate ONLY SELECT queries - no INSERT, UPDATE, DELETE, or ALTER statements
         2. Use proper SQL syntax and formatting
@@ -69,7 +64,7 @@ class NL2SQLPrompts:
         SQL Query:"""
         
         return PromptTemplate(
-            input_variables=["question", "schema", "tables", "context"],
+            input_variables=["question", "schema", "tables"],
             template=template
         )
     
@@ -103,42 +98,7 @@ class NL2SQLPrompts:
         Explanation:"""
         
         return PromptTemplate(
-            input_variables=["question", "sql_query", "schema", "results_count"],
-            template=template
-        )
-    
-    @staticmethod
-    def get_query_validation_prompt() -> PromptTemplate:
-        """
-        Prompt for validating generated SQL query
-        """
-        template = """
-        Review the following SQL query for correctness and safety.
-
-        Database Schema:
-        {schema}
-
-        Generated SQL Query:
-        {sql_query}
-
-        Original Question: {question}
-
-        Check for:
-        1. Syntax correctness
-        2. Table and column name validity against schema
-        3. Proper JOIN conditions
-        4. Logical correctness for answering the question
-        5. Security issues (only SELECT allowed)
-        6. Performance considerations
-
-        Respond with:
-        - "VALID" if the query is correct and safe
-        - "INVALID: [reason]" if there are issues
-
-        Validation Result:"""
-        
-        return PromptTemplate(
-            input_variables=["schema", "sql_query", "question"],
+            input_variables=["question", "sql_query", "schema"],
             template=template
         )
     
@@ -172,41 +132,7 @@ class NL2SQLPrompts:
             input_variables=["question", "sql_query", "raw_results"],
             template=template
         )
-    
-    @staticmethod
-    def get_error_analysis_prompt() -> PromptTemplate:
-        """
-        Prompt for analyzing SQL execution errors and providing suggestions
-        """
-        template = """
-        Analyze the following SQL error and provide helpful guidance.
-
-        Original Question: {question}
-
-        Generated SQL Query:
-        {sql_query}
-
-        Error Message:
-        {error_message}
-
-        Database Schema:
-        {schema}
-
-        Analyze the error and provide:
-        1. What caused the error
-        2. Specific issues in the SQL query
-        3. Suggestions to fix the query
-        4. Alternative approaches to answer the question
-
-        Keep the explanation user-friendly and actionable.
-
-        Error Analysis:"""
         
-        return PromptTemplate(
-            input_variables=["question", "sql_query", "error_message", "schema"],
-            template=template
-        )
-    
     @staticmethod
     def get_context_aware_prompt() -> PromptTemplate:
         """
@@ -248,23 +174,12 @@ class PromptManager:
     def get_prompt(self, prompt_type: str) -> PromptTemplate:
         """
         Get a specific prompt by type
-        
-        Args:
-            prompt_type: Type of prompt to retrieve
-                       Options: 'table_selection', 'sql_generation', 'query_explanation',
-                               'query_validation', 'result_formatting', 'error_analysis',
-                               'context_aware'
-        
-        Returns:
-            PromptTemplate object
         """
         prompt_methods = {
             'table_selection': self.prompts.get_table_selection_prompt,
             'sql_generation': self.prompts.get_sql_generation_prompt,
             'query_explanation': self.prompts.get_query_explanation_prompt,
-            'query_validation': self.prompts.get_query_validation_prompt,
             'result_formatting': self.prompts.get_result_formatting_prompt,
-            'error_analysis': self.prompts.get_error_analysis_prompt,
             'context_aware': self.prompts.get_context_aware_prompt
         }
         
@@ -279,25 +194,6 @@ class PromptManager:
             'table_selection',
             'sql_generation', 
             'query_explanation',
-            'query_validation',
             'result_formatting',
-            'error_analysis',
             'context_aware'
         ]
-    
-    def customize_prompt(self, prompt_type: str, custom_template: str, input_variables: List[str]) -> PromptTemplate:
-        """
-        Create a custom prompt template
-        
-        Args:
-            prompt_type: Identifier for the custom prompt
-            custom_template: The template string
-            input_variables: List of input variable names
-            
-        Returns:
-            PromptTemplate object
-        """
-        return PromptTemplate(
-            input_variables=input_variables,
-            template=custom_template
-        )

@@ -3,6 +3,7 @@
 .env
 
 src/class
+src/basic
 
 *.ipynb
 
