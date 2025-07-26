@@ -1,7 +1,7 @@
 from sqlalchemy import create_engine, text
 from sqlalchemy.exc import SQLAlchemyError
 from langchain_community.utilities.sql_database import SQLDatabase
-from typing import Tuple, Optional
+
 
 class DatabaseConnection:
     """Handles database connections for multiple database types"""

@@ -1,5 +1,6 @@
 from typing import TypedDict, List, Dict, Optional
 from langgraph.graph import StateGraph, START, END
+from langgraph.checkpoint.memory import MemorySaver
 from graph_utils import analyze_schema, select_relevant_tables, generate_sql, execute_query, format_results, explain_query
 from prompts import PromptManager
 from db_connect import DatabaseConnection
@@ -39,11 +40,14 @@ def build_graph(prompt_manager: PromptManager, db_connection: DatabaseConnection
 
     def _format_results(state: NL2SQLState) -> NL2SQLState:
         state = format_results(state, llm, prompt_manager)
-        # Update memory
+        # Update memory 
         if "chat_history" not in state:
             state["chat_history"] = []
-        state["chat_history"].append({"role": "user", "content": state["question"]})
-        state["chat_history"].append({"role": "assistant", "content": state["formatted_response"]})
+        
+        if not state.get("error_message") and state.get("formatted_response"):
+            state["chat_history"].append({"role": "user", "content": state["question"]})
+            state["chat_history"].append({"role": "assistant", "content": state["formatted_response"]})
+        
         return state
 
     def _explain_query(state: NL2SQLState) -> NL2SQLState:
@@ -69,4 +73,7 @@ def build_graph(prompt_manager: PromptManager, db_connection: DatabaseConnection
     workflow.add_edge("format_results", "explain_query")
     workflow.add_edge("explain_query", END)
     
-    return workflow.compile()
+    # Add memory persistence with checkpointer
+    memory = MemorySaver()
+
+    return workflow.compile(checkpointer=memory)

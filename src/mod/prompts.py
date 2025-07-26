@@ -117,50 +117,23 @@ class NL2SQLPrompts:
         Raw Results:
         {raw_results}
 
+        Chat History (for context):
+        {chat_history}
+
         Create a well-formatted response that:
         1. Provides a brief summary of what was found
         2. Presents the data in an organized, readable format
         3. Highlights key insights or patterns if relevant
         4. Mentions the total number of results
         5. Uses appropriate formatting (tables, lists, etc.)
+        6. Considers previous conversation context when relevant
 
         If there are no results, provide a helpful message explaining why and suggest potential alternatives.
 
         Formatted Results:"""
         
         return PromptTemplate(
-            input_variables=["question", "sql_query", "raw_results"],
-            template=template
-        )
-        
-    @staticmethod
-    def get_context_aware_prompt() -> PromptTemplate:
-        """
-        Prompt that considers conversation history for better context
-        """
-        template = """
-        You are helping with a natural language to SQL conversion. Consider the conversation history to provide better responses.
-
-        Conversation History:
-        {conversation_history}
-
-        Current Database Schema:
-        {schema}
-
-        Current Question: {question}
-
-        Based on the conversation context and current question:
-        1. Identify if this question relates to previous queries
-        2. Consider any clarifications or refinements from the conversation
-        3. Use context to better understand what the user is looking for
-        4. Generate an appropriate SQL query that considers the full context
-
-        Generate a SQL SELECT query that answers the current question while considering the conversation context.
-
-        SQL Query:"""
-        
-        return PromptTemplate(
-            input_variables=["conversation_history", "schema", "question"],
+            input_variables=["question", "sql_query", "raw_results", "chat_history"],
             template=template
         )
 
@@ -179,8 +152,7 @@ class PromptManager:
             'table_selection': self.prompts.get_table_selection_prompt,
             'sql_generation': self.prompts.get_sql_generation_prompt,
             'query_explanation': self.prompts.get_query_explanation_prompt,
-            'result_formatting': self.prompts.get_result_formatting_prompt,
-            'context_aware': self.prompts.get_context_aware_prompt
+            'result_formatting': self.prompts.get_result_formatting_prompt
         }
         
         if prompt_type not in prompt_methods:
@@ -194,6 +166,5 @@ class PromptManager:
             'table_selection',
             'sql_generation', 
             'query_explanation',
-            'result_formatting',
-            'context_aware'
+            'result_formatting'
         ]

@@ -178,10 +178,17 @@ def format_results(state: NL2SQLState,
         df = pd.DataFrame(state["query_results"])
         raw_results_str = df.to_string(index=False, max_rows=25)
         
+        # Include chat history for context if available
+        chat_history_str = ""
+        if state.get("chat_history"):
+            recent_history = state["chat_history"][-4:]  # Last 2 exchanges
+            chat_history_str = "\n".join([f"{msg['role']}: {msg['content']}" for msg in recent_history])
+        
         formatted_response = chain.run(
             question=state["question"],
             sql_query=state["sql_query"],
-            raw_results=raw_results_str
+            raw_results=raw_results_str,
+            chat_history=chat_history_str
         )
 
         state["formatted_response"] = formatted_response 
@@ -190,6 +197,3 @@ def format_results(state: NL2SQLState,
     except Exception as e:
         state["error_message"] = f"Error formatting results: {str(e)}"
         return state
-
-
-
