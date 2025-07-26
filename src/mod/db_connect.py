@@ -1,6 +1,7 @@
 from sqlalchemy import create_engine, text
 from sqlalchemy.exc import SQLAlchemyError
-from langchain_community.utilities.sql_database import SQLDatabase
+from langchain_community.utilities import SQLDatabase
+from urllib.parse import quote_plus
 
 
 class DatabaseConnection:
@@ -39,10 +40,13 @@ class DatabaseConnection:
                 uri = f"sqlite:///{db_name}"
             else:
                 port_part = f":{db_port}" if db_port else ""
-                uri = f"{dialect_map[db_type.lower()]}://{db_user}:{db_password}@{db_host}{port_part}/{db_name}"
+                # URL encode username and password to handle special characters
+                encoded_user = quote_plus(db_user)
+                encoded_password = quote_plus(db_password)
+                uri = f"{dialect_map[db_type.lower()]}://{encoded_user}:{encoded_password}@{db_host}{port_part}/{db_name}"
 
             self.engine = create_engine(uri, echo=False)
-            self.db = SQLDatabase.from_engine(self.engine)
+            self.db = SQLDatabase(engine=self.engine)
             return self.db
 
         except SQLAlchemyError as e:

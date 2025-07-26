@@ -25,7 +25,6 @@ class NL2SQLPrompts:
         4. Foreign key relationships
 
         You must return a structured response with the relevant table names.
-        If no tables seem relevant, return an empty list.
 
         Relevant Tables:"""
         

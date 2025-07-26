@@ -4,7 +4,7 @@ from langgraph.checkpoint.memory import MemorySaver
 from graph_utils import analyze_schema, select_relevant_tables, generate_sql, execute_query, format_results, explain_query
 from prompts import PromptManager
 from db_connect import DatabaseConnection
-from llm import TogetherLLM
+from llm import setup_llm
 
 
 # Define state with memory
@@ -20,7 +20,7 @@ class NL2SQLState(TypedDict):
     chat_history: List[Dict[str, str]]  
 
 
-def build_graph(prompt_manager: PromptManager, db_connection: DatabaseConnection, llm: TogetherLLM) -> StateGraph:
+def build_graph(prompt_manager: PromptManager, db_connection: DatabaseConnection, llm: setup_llm) -> StateGraph:
 
     workflow = StateGraph(NL2SQLState)
 

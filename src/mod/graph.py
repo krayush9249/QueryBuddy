@@ -1,12 +1,15 @@
 import re
 import pandas as pd
-from typing import List
-from pydantic import BaseModel, Field, validator, root_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 from sqlalchemy import text
 from db_connect import DatabaseConnection
 from prompts import PromptManager
-from graph_builder import NL2SQLState
-from llm import setup_llm
+from llm import LLMSetup
+from typing import TypedDict, List, Dict, Optional
+from langgraph.graph import StateGraph, START, END
+from langgraph.checkpoint.memory import MemorySaver
+from state_schema import NL2SQLState
+import logging
 
 
 def analyze_schema(state: NL2SQLState, 
@@ -27,23 +30,23 @@ def analyze_schema(state: NL2SQLState,
 
 class TableSelectionOutput(BaseModel):
     relevant_tables: List[str] = Field(
-        ..., description="List of relevant table names. Leave empty if no tables are found."
+        ..., description="List of relevant table names."
     )
 
 def select_relevant_tables(state: NL2SQLState,
-                           llm: setup_llm,
+                           llm: LLMSetup,
                            prompt_manager: PromptManager) -> NL2SQLState:
     """Select relevant tables based on the question using structured output"""
     try:
         prompt = prompt_manager.get_prompt('table_selection')
-        structured_llm = llm.with_structured_output(TableSelectionOutput)
-        chain = structured_llm | prompt
+        structured_llm = llm #.with_structured_output(TableSelectionOutput)
+        chain = prompt | structured_llm
 
-        response: TableSelectionOutput = chain.invoke({
+        response = chain.invoke({
             "question": state["question"],
             "schema": state["db_schema"]
         })
-        state["relevant_tables"] = response.relevant_tables
+        state["relevant_tables"] = response #.relevant_tables
         return state
 
     except Exception as e:
@@ -54,22 +57,24 @@ def select_relevant_tables(state: NL2SQLState,
 class SQLQueryValidator(BaseModel):
     sql_query: str
 
-    @validator('sql_query', pre=True)
+    @field_validator('sql_query', mode='before')
+    @classmethod
     def clean_markdown(cls, v):
         v = re.sub(r'```sql\n?', '', v)
         v = re.sub(r'```\n?', '', v)
         v = re.sub(r'^sql\s*', '', v, flags=re.IGNORECASE)
         return v.strip()
 
-    @validator('sql_query')
+    @field_validator('sql_query')
+    @classmethod
     def must_be_select_query(cls, v):
         if not v.upper().startswith("SELECT"):
             raise ValueError("Only SELECT queries are allowed")
         return v
 
-    @root_validator
+    @model_validator(mode='after')
     def check_prohibited_keywords(cls, values):
-        sql = values.get("sql_query", "").upper()
+        sql = values.sql_query.upper()
         prohibited_keywords = [
             'INSERT', 'UPDATE', 'DELETE', 'DROP', 'ALTER', 'CREATE',
             'TRUNCATE', 'REPLACE', 'MERGE', 'GRANT', 'REVOKE'
@@ -80,19 +85,19 @@ class SQLQueryValidator(BaseModel):
         return values
 
 def generate_sql(state: NL2SQLState, 
-                llm: setup_llm,
+                llm: LLMSetup,
                 prompt_manager: PromptManager) -> NL2SQLState:
     """Generate SQL query based on the question and relevant tables"""
     try:
         prompt = prompt_manager.get_prompt('sql_generation')
         structured_llm = llm.with_structured_output(SQLQueryValidator)
-        chain = structured_llm | prompt
+        chain = prompt | structured_llm
         
-        response = chain.run(
-            question=state["question"],
-            schema=state["db_schema"],
-            tables=", ".join(state["relevant_tables"])
-        )
+        response = chain.invoke({
+            "question": state["question"],
+            "schema": state["db_schema"],
+            "tables": ", ".join(state["relevant_tables"])
+        })
         state["sql_query"] = response.sql_query
         return state
    
@@ -102,7 +107,7 @@ def generate_sql(state: NL2SQLState,
 
 
 def explain_query(state: NL2SQLState, 
-                 llm: setup_llm,
+                 llm: LLMSetup,
                  prompt_manager: PromptManager) -> NL2SQLState:
     """Generate explanation for the SQL query"""
     if state.get("error_message"):
@@ -110,16 +115,16 @@ def explain_query(state: NL2SQLState,
     
     try:
         prompt = prompt_manager.get_prompt('query_explanation')
-        chain = llm | prompt
+        chain = prompt | llm
         
-        explanation = chain.run(
-            question=state["question"],
-            sql_query=state["sql_query"],
-            schema=state["db_schema"]
-        )
-        
+        explanation = chain.invoke({
+            "question": state["question"],
+            "sql_query": state["sql_query"],
+            "schema": state["db_schema"]
+        })
         state["explanation"] = explanation.strip()
         return state
+    
     except Exception as e:
         state["error_message"] = f"Error generating explanation: {str(e)}"
         return state
@@ -127,7 +132,7 @@ def explain_query(state: NL2SQLState,
     
 def execute_query(state: NL2SQLState, 
                   db_connection: DatabaseConnection,
-                  llm: setup_llm,
+                  llm: LLMSetup,
                   prompt_manager: PromptManager) -> NL2SQLState:
     """Execute the generated SQL query using an agent"""
 
@@ -159,7 +164,7 @@ def execute_query(state: NL2SQLState,
     
 
 def format_results(state: NL2SQLState, 
-                  llm: setup_llm,
+                  llm: LLMSetup,
                   prompt_manager: PromptManager) -> NL2SQLState:
     """Format query results for display"""
     if state.get("error_message"):
@@ -171,7 +176,7 @@ def format_results(state: NL2SQLState,
     
     try:
         prompt = prompt_manager.get_prompt('result_formatting')
-        chain = llm | prompt
+        chain = prompt | llm
         
         # Convert results to string for prompt
         df = pd.DataFrame(state["query_results"])
@@ -183,16 +188,75 @@ def format_results(state: NL2SQLState,
             recent_history = state["chat_history"][-4:]  # Last 2 exchanges
             chat_history_str = "\n".join([f"{msg['role']}: {msg['content']}" for msg in recent_history])
         
-        formatted_response = chain.run(
-            question=state["question"],
-            sql_query=state["sql_query"],
-            raw_results=raw_results_str,
-            chat_history=chat_history_str
-        )
-
+        formatted_response = chain.invoke({
+            "question": state["question"],
+            "sql_query": state["sql_query"],
+            "raw_results": raw_results_str,
+            "chat_history": chat_history_str
+        })
         state["formatted_response"] = formatted_response 
         return state
         
     except Exception as e:
         state["error_message"] = f"Error formatting results: {str(e)}"
         return state
+    
+
+def build_graph(prompt_manager: PromptManager, db_connection: DatabaseConnection, llm: LLMSetup) -> StateGraph:
+
+    workflow = StateGraph(NL2SQLState)
+
+    def _analyze_schema(state: NL2SQLState) -> NL2SQLState:
+        if "chat_history" not in state:
+            state["chat_history"] = []
+        return analyze_schema(state, db_connection)
+
+    def _find_relevant_tables(state: NL2SQLState) -> NL2SQLState:
+        return select_relevant_tables(state, llm, prompt_manager)
+
+    def _generate_sql(state: NL2SQLState) -> NL2SQLState:
+        return generate_sql(state, llm, prompt_manager)
+
+    def _execute_query(state: NL2SQLState) -> NL2SQLState:
+        return execute_query(state, db_connection, llm, prompt_manager)
+
+    def _format_results(state: NL2SQLState) -> NL2SQLState:
+        state = format_results(state, llm, prompt_manager)
+        # Update memory 
+        if "chat_history" not in state:
+            state["chat_history"] = []
+        
+        if not state.get("error_message") and state.get("formatted_response"):
+            state["chat_history"].append({"role": "user", "content": state["question"]})
+            state["chat_history"].append({"role": "assistant", "content": state["formatted_response"]})
+        
+        return state
+
+    def _explain_query(state: NL2SQLState) -> NL2SQLState:
+        return explain_query(state, llm, prompt_manager)
+
+    # Add nodes to graph
+    workflow.add_node("analyze_schema", _analyze_schema)
+    workflow.add_node("find_relevant_tables", _find_relevant_tables)
+    workflow.add_node("generate_sql", _generate_sql)
+    workflow.add_node("execute_query", _execute_query)
+    workflow.add_node("format_results", _format_results)
+    workflow.add_node("explain_query", _explain_query)
+
+    # Set entrypoint
+    workflow.set_entry_point("analyze_schema")
+
+    # Define edges
+    workflow.add_edge(START, "analyze_schema")
+    # workflow.add_edge("analyze_schema", "generate_sql")
+    workflow.add_edge("analyze_schema", "find_relevant_tables")
+    workflow.add_edge("find_relevant_tables", "generate_sql")
+    workflow.add_edge("generate_sql", "execute_query")
+    workflow.add_edge("execute_query", "format_results")
+    workflow.add_edge("format_results", "explain_query")
+    workflow.add_edge("explain_query", END)
+    
+    # Add memory persistence with checkpointer
+    memory = MemorySaver()
+
+    return workflow.compile(checkpointer=memory)

@@ -1,9 +1,10 @@
 import os
 from dotenv import load_dotenv
-from graph_builder import build_graph, NL2SQLState
+from graph import build_graph
+from state_schema import NL2SQLState
 from prompts import PromptManager
 from db_connect import DatabaseConnection
-from llm import setup_llm
+from llm import LLMSetup
 
 load_dotenv()
 
@@ -18,7 +19,7 @@ def main():
     db_password = os.getenv('DB_PASSWORD')
     
     # Setup LLM
-    llm = setup_llm(together_api_key)
+    llm = LLMSetup(together_api_key)
     
     # Setup database connection
     db_connection = DatabaseConnection()
@@ -35,39 +36,58 @@ def main():
     # Build the graph
     workflow = build_graph(prompt_manager, db_connection, llm)
     
-    # Get user question
-    user_question = input("Enter your question: ")
-
-    # Test with a sample question
-    initial_state = NL2SQLState(
-        question=user_question,
-        db_schema="",
-        relevant_tables=[],
-        sql_query="",
-        query_results=[],
-        formatted_response="",
-        explanation="",
-        error_message="",
-        chat_history=[]
-    )
+    # Use a consistent thread_id to maintain conversation history
+    thread_config = {"configurable": {"thread_id": "user_session_1"}}
     
-    # Execute the workflow
-    try:
-        # Use a consistent thread_id to maintain conversation history
-        thread_config = {"configurable": {"thread_id": "user_session_1"}}
+    print("Welcome to NL2SQL Chat! Type 'quit' or 'exit' to end the session.")
+    print("-" * 100)
+    
+    # Main conversation loop
+    while True:
+        # Get user question
+        # user_question = input("\nEnter your question: ").strip()
+        user_question = "Tell me the number of employees hired after the year 1999"
         
-        result = workflow.invoke(initial_state, config=thread_config)
-
-        print(f"Question: {result['question']}")
-        print(f"SQL Query: {result['sql_query']}")
-        print(f"Response: {result['formatted_response']}")
-        print(f"Explanation: {result['explanation']}")
+        # Check for exit conditions
+        if user_question.lower() in ['quit', 'exit']:
+            print("Thank you for using NL2SQL Chat. Goodbye!")
+            break
         
-        if result.get('error_message'):
-            print(f"Error: {result['error_message']}")
+        # Skip empty questions
+        if not user_question:
+            print("Please enter a valid question.")
+            continue
+        
+        # Create state for current question
+        current_state = NL2SQLState(
+            question=user_question,
+            db_schema="",
+            relevant_tables=[],
+            sql_query="",
+            query_results=[],
+            formatted_response="",
+            explanation="",
+            error_message="",
+            chat_history=[]
+        )
+        
+        # Execute the workflow
+        try:
+            result = workflow.invoke(current_state, config=thread_config)
             
-    except Exception as e:
-        print(f"Execution failed: {str(e)}")
+            print(f"\nDB Schema: {result['db_schema']}")
+            print(f"\nRelevant Tables: {result['relevant_tables']}")
+            print(f"\nSQL Query: {result['sql_query']}")
+            print(f"\nResponse: {result['formatted_response']}")
+            print(f"\nExplanation: {result['explanation']}")
+            
+            if result.get('error_message'):
+                print(f"\nError: {result['error_message']}")
+                
+        except Exception as e:
+            print(f"\nExecution failed: {str(e)}")
+        
+        print("-" * 100)
 
 if __name__ == "__main__":
     main()
