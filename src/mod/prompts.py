@@ -48,10 +48,13 @@ class NL2SQLPrompts:
 
         User Question: {question}
 
-        IMPORTANT RULES:
+        CRITICAL RULES:
         1. Generate ONLY SELECT queries - no INSERT, UPDATE, DELETE, or ALTER statements
         2. You must respond with a valid JSON object in this exact format: {{"sql_query": "YOUR_SQL_QUERY_HERE"}}
         3. Do not include any thinking steps, explanations, markdowns or additional text outside the JSON.
+
+        Example:
+        {{"sql_query": "SELECT emp_no, first_name FROM employees WHERE hire_date > '2000-01-01';"}}
 
         SQL Query:"""
         

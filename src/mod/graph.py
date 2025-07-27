@@ -1,4 +1,5 @@
 import re
+import json
 import pandas as pd
 from pydantic import BaseModel, Field, field_validator, model_validator
 from sqlalchemy import text
@@ -52,108 +53,53 @@ def select_relevant_tables(state: NL2SQLState,
         return state
 
 
-# class SQLQueryValidator(BaseModel):
-#     sql_query: str
-
-#     @field_validator('sql_query', mode='before')
-#     @classmethod
-#     def clean_markdown(cls, v):
-#         v = re.sub(r'```sql\n?', '', v)
-#         v = re.sub(r'```\n?', '', v)
-#         v = re.sub(r'^sql\s*', '', v, flags=re.IGNORECASE)
-#         return v.strip()
-
-#     @field_validator('sql_query')
-#     @classmethod
-#     def must_be_select_query(cls, v):
-#         if not v.upper().startswith("SELECT"):
-#             raise ValueError("Only SELECT queries are allowed")
-#         return v
-
-#     @model_validator(mode='after')
-#     def check_prohibited_keywords(cls, values):
-#         sql = values.sql_query.upper()
-#         prohibited_keywords = [
-#             'INSERT', 'UPDATE', 'DELETE', 'DROP', 'ALTER', 'CREATE',
-#             'TRUNCATE', 'REPLACE', 'MERGE', 'GRANT', 'REVOKE'
-#         ]
-#         for keyword in prohibited_keywords:
-#             if keyword in sql:
-#                 raise ValueError(f"Prohibited SQL operation detected: {keyword}")
-#         return values
-
 class SQLQueryValidator(BaseModel):
     sql_query: str
 
     @field_validator('sql_query', mode='before')
     @classmethod
     def clean_and_extract_sql(cls, v):
-        """Clean and extract SQL query from reasoning model output"""
+        """Extract SQL query from various formats"""
         content = str(v)
         
-        # Step 1: Remove thinking blocks
-        content = re.sub(r'<think>.*?</think>', '', content, flags=re.DOTALL)
+        # Step 1: Handle JSON format (most common case)
+        try:
+            if content.strip().startswith('{') and content.strip().endswith('}'):
+                parsed = json.loads(content.strip())
+                if 'sql_query' in parsed:
+                    return parsed['sql_query']
+        except json.JSONDecodeError:
+            pass
         
-        # Step 2: Remove common prefixes and markdown
-        content = re.sub(r'```sql\n?', '', content)
-        content = re.sub(r'```\n?', '', content)
-        content = re.sub(r'^sql\s*query:\s*', '', content, flags=re.IGNORECASE | re.MULTILINE)
-        content = re.sub(r'^sql:\s*', '', content, flags=re.IGNORECASE | re.MULTILINE)
+        # Step 2: Regex JSON extraction
+        match = re.search(r'"sql_query":\s*"([^"]*)"', content)
+        if match:
+            return match.group(1)
         
-        # Step 3: Try multiple extraction strategies
+        # Step 3: Extract JSON from mixed text
+        json_match = re.search(r'\{[^}]*"sql_query"[^}]*\}', content)
+        if json_match:
+            try:
+                parsed = json.loads(json_match.group(0))
+                extracted_sql = parsed.get('sql_query', '')
+                if extracted_sql:
+                    return extracted_sql
+            except json.JSONDecodeError:
+                pass
         
-        # Strategy 1: Find complete SELECT....; pattern
-        select_pattern = re.search(
-            r'(SELECT\s+.*?;)', 
-            content, 
-            re.DOTALL | re.IGNORECASE
-        )
+        # Step 4: Find SELECT statement with semicolon
+        select_pattern = re.search(r'(SELECT\s+.*?;)', content, re.DOTALL | re.IGNORECASE)
         if select_pattern:
-            extracted_sql = select_pattern.group(1)
-        else:
-            # Strategy 2: Line-by-line extraction
-            lines = [line.strip() for line in content.split('\n') if line.strip()]
-            sql_lines = []
-            capturing = False
-            
-            for line in lines:
-                if line.upper().startswith('SELECT'):
-                    capturing = True
-                
-                if capturing:
-                    sql_lines.append(line)
-                    if line.endswith(';'):
-                        break
-            
-            if sql_lines:
-                extracted_sql = ' '.join(sql_lines)
-            else:
-                # Strategy 3: Find any SELECT statement (fallback)
-                for line in lines:
-                    if 'SELECT' in line.upper():
-                        extracted_sql = line
-                        break
-                else:
-                    extracted_sql = content.strip()
+            return select_pattern.group(1)
         
-        # Step 4: Final cleanup
-        extracted_sql = re.sub(r'\s+', ' ', extracted_sql.strip())
-        
-        # Remove trailing periods if present (sometimes models add them)
-        if extracted_sql.endswith('.'):
-            extracted_sql = extracted_sql[:-1]
-        
-        # Ensure it ends with semicolon
-        if not extracted_sql.endswith(';'):
-            extracted_sql += ';'
-            
-        return extracted_sql
+        # If no valid SQL found, fail explicitly
+        raise ValueError(f"Could not extract SQL query from input: {content[:100]}...")
 
     @field_validator('sql_query')
     @classmethod
     def must_be_select_query(cls, v):
-        if not v.upper().startswith("SELECT"):
-            raise ValueError("Only SELECT queries are allowed")
+        if not v or not v.upper().startswith("SELECT"):
+            raise ValueError(f"Only SELECT queries are allowed. Got: {v}")
         return v
 
     @model_validator(mode='after')
@@ -174,21 +120,23 @@ def generate_sql(state: NL2SQLState,
     """Generate SQL query based on the question and relevant tables"""
     try:
         prompt = prompt_manager.get_prompt('sql_generation')
-        structured_llm = llm.with_structured_output(SQLQueryValidator)
-        chain = prompt | structured_llm
+        chain = prompt | llm
         
-        response = chain.invoke({
+        # Get raw response from LLM
+        raw_response = chain.invoke({
             "question": state["question"],
             "schema": state["db_schema"],
             "tables": ", ".join(state["relevant_tables"])
         })
-        state["sql_query"] = response.sql_query
+        
+        # Use validator to parse and validate the response
+        validated_query = SQLQueryValidator(sql_query=raw_response.content)
+        state["sql_query"] = validated_query.sql_query
         return state
    
     except Exception as e:
         state["error_message"] = f"Error generating SQL: {str(e)}"
         return state
-
 
 def explain_query(state: NL2SQLState, 
                  llm,

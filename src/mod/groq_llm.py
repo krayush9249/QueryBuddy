@@ -14,7 +14,7 @@ def setup_groq_llms(groq_api_key: str,
         api_key=groq_api_key,
         model_name=coding_model,  
         temperature=0.1, # Low temperature for deterministic code
-        max_tokens=5000
+        max_tokens=2000
     )
     
     # Chat LLM 
@@ -22,7 +22,7 @@ def setup_groq_llms(groq_api_key: str,
         api_key=groq_api_key,
         model_name=chat_model,  
         temperature=0.3,  # High temperature for creative chat responses
-        max_tokens=5000
+        max_tokens=2000
     )
     
     return coding_llm, chat_llm

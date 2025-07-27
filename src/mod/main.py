@@ -48,7 +48,7 @@ def main():
     while True:
         # Get user question
         # user_question = input("\nEnter your question: ").strip()
-        # user_question = "Tell me the number of employees hired after the year 1999"
+        #user_question = "Tell me the number of employees hired after the year 1999"
         user_question = "Find the average current salary of employees in each department."
         
         # Check for exit conditions
