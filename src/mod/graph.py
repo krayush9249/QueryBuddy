@@ -4,12 +4,10 @@ from pydantic import BaseModel, Field, field_validator, model_validator
 from sqlalchemy import text
 from db_connect import DatabaseConnection
 from prompts import PromptManager
-from llm import LLMSetup
-from typing import TypedDict, List, Dict, Optional
+from typing import List
 from langgraph.graph import StateGraph, START, END
 from langgraph.checkpoint.memory import MemorySaver
 from state_schema import NL2SQLState
-import logging
 
 
 def analyze_schema(state: NL2SQLState, 
@@ -34,19 +32,19 @@ class TableSelectionOutput(BaseModel):
     )
 
 def select_relevant_tables(state: NL2SQLState,
-                           llm: LLMSetup,
+                           llm,
                            prompt_manager: PromptManager) -> NL2SQLState:
     """Select relevant tables based on the question using structured output"""
     try:
         prompt = prompt_manager.get_prompt('table_selection')
-        structured_llm = llm #.with_structured_output(TableSelectionOutput)
+        structured_llm = llm.with_structured_output(TableSelectionOutput)
         chain = prompt | structured_llm
 
         response = chain.invoke({
             "question": state["question"],
             "schema": state["db_schema"]
         })
-        state["relevant_tables"] = response #.relevant_tables
+        state["relevant_tables"] = response.relevant_tables
         return state
 
     except Exception as e:
@@ -54,16 +52,102 @@ def select_relevant_tables(state: NL2SQLState,
         return state
 
 
+# class SQLQueryValidator(BaseModel):
+#     sql_query: str
+
+#     @field_validator('sql_query', mode='before')
+#     @classmethod
+#     def clean_markdown(cls, v):
+#         v = re.sub(r'```sql\n?', '', v)
+#         v = re.sub(r'```\n?', '', v)
+#         v = re.sub(r'^sql\s*', '', v, flags=re.IGNORECASE)
+#         return v.strip()
+
+#     @field_validator('sql_query')
+#     @classmethod
+#     def must_be_select_query(cls, v):
+#         if not v.upper().startswith("SELECT"):
+#             raise ValueError("Only SELECT queries are allowed")
+#         return v
+
+#     @model_validator(mode='after')
+#     def check_prohibited_keywords(cls, values):
+#         sql = values.sql_query.upper()
+#         prohibited_keywords = [
+#             'INSERT', 'UPDATE', 'DELETE', 'DROP', 'ALTER', 'CREATE',
+#             'TRUNCATE', 'REPLACE', 'MERGE', 'GRANT', 'REVOKE'
+#         ]
+#         for keyword in prohibited_keywords:
+#             if keyword in sql:
+#                 raise ValueError(f"Prohibited SQL operation detected: {keyword}")
+#         return values
+
 class SQLQueryValidator(BaseModel):
     sql_query: str
 
     @field_validator('sql_query', mode='before')
     @classmethod
-    def clean_markdown(cls, v):
-        v = re.sub(r'```sql\n?', '', v)
-        v = re.sub(r'```\n?', '', v)
-        v = re.sub(r'^sql\s*', '', v, flags=re.IGNORECASE)
-        return v.strip()
+    def clean_and_extract_sql(cls, v):
+        """Clean and extract SQL query from reasoning model output"""
+        content = str(v)
+        
+        # Step 1: Remove thinking blocks
+        content = re.sub(r'<think>.*?</think>', '', content, flags=re.DOTALL)
+        
+        # Step 2: Remove common prefixes and markdown
+        content = re.sub(r'```sql\n?', '', content)
+        content = re.sub(r'```\n?', '', content)
+        content = re.sub(r'^sql\s*query:\s*', '', content, flags=re.IGNORECASE | re.MULTILINE)
+        content = re.sub(r'^sql:\s*', '', content, flags=re.IGNORECASE | re.MULTILINE)
+        
+        # Step 3: Try multiple extraction strategies
+        
+        # Strategy 1: Find complete SELECT....; pattern
+        select_pattern = re.search(
+            r'(SELECT\s+.*?;)', 
+            content, 
+            re.DOTALL | re.IGNORECASE
+        )
+        if select_pattern:
+            extracted_sql = select_pattern.group(1)
+        else:
+            # Strategy 2: Line-by-line extraction
+            lines = [line.strip() for line in content.split('\n') if line.strip()]
+            sql_lines = []
+            capturing = False
+            
+            for line in lines:
+                if line.upper().startswith('SELECT'):
+                    capturing = True
+                
+                if capturing:
+                    sql_lines.append(line)
+                    if line.endswith(';'):
+                        break
+            
+            if sql_lines:
+                extracted_sql = ' '.join(sql_lines)
+            else:
+                # Strategy 3: Find any SELECT statement (fallback)
+                for line in lines:
+                    if 'SELECT' in line.upper():
+                        extracted_sql = line
+                        break
+                else:
+                    extracted_sql = content.strip()
+        
+        # Step 4: Final cleanup
+        extracted_sql = re.sub(r'\s+', ' ', extracted_sql.strip())
+        
+        # Remove trailing periods if present (sometimes models add them)
+        if extracted_sql.endswith('.'):
+            extracted_sql = extracted_sql[:-1]
+        
+        # Ensure it ends with semicolon
+        if not extracted_sql.endswith(';'):
+            extracted_sql += ';'
+            
+        return extracted_sql
 
     @field_validator('sql_query')
     @classmethod
@@ -85,7 +169,7 @@ class SQLQueryValidator(BaseModel):
         return values
 
 def generate_sql(state: NL2SQLState, 
-                llm: LLMSetup,
+                llm,
                 prompt_manager: PromptManager) -> NL2SQLState:
     """Generate SQL query based on the question and relevant tables"""
     try:
@@ -107,7 +191,7 @@ def generate_sql(state: NL2SQLState,
 
 
 def explain_query(state: NL2SQLState, 
-                 llm: LLMSetup,
+                 llm,
                  prompt_manager: PromptManager) -> NL2SQLState:
     """Generate explanation for the SQL query"""
     if state.get("error_message"):
@@ -122,7 +206,7 @@ def explain_query(state: NL2SQLState,
             "sql_query": state["sql_query"],
             "schema": state["db_schema"]
         })
-        state["explanation"] = explanation.strip()
+        state["explanation"] = explanation.content.strip()
         return state
     
     except Exception as e:
@@ -131,9 +215,7 @@ def explain_query(state: NL2SQLState,
     
     
 def execute_query(state: NL2SQLState, 
-                  db_connection: DatabaseConnection,
-                  llm: LLMSetup,
-                  prompt_manager: PromptManager) -> NL2SQLState:
+                  db_connection: DatabaseConnection) -> NL2SQLState:
     """Execute the generated SQL query using an agent"""
 
     if not db_connection or not db_connection.engine:
@@ -164,7 +246,7 @@ def execute_query(state: NL2SQLState,
     
 
 def format_results(state: NL2SQLState, 
-                  llm: LLMSetup,
+                  llm,
                   prompt_manager: PromptManager) -> NL2SQLState:
     """Format query results for display"""
     if state.get("error_message"):
@@ -194,7 +276,7 @@ def format_results(state: NL2SQLState,
             "raw_results": raw_results_str,
             "chat_history": chat_history_str
         })
-        state["formatted_response"] = formatted_response 
+        state["formatted_response"] = formatted_response.content.strip()
         return state
         
     except Exception as e:
@@ -202,7 +284,7 @@ def format_results(state: NL2SQLState,
         return state
     
 
-def build_graph(prompt_manager: PromptManager, db_connection: DatabaseConnection, llm: LLMSetup) -> StateGraph:
+def build_graph(prompt_manager: PromptManager, db_connection: DatabaseConnection, llm) -> StateGraph:
 
     workflow = StateGraph(NL2SQLState)
 
@@ -218,7 +300,7 @@ def build_graph(prompt_manager: PromptManager, db_connection: DatabaseConnection
         return generate_sql(state, llm, prompt_manager)
 
     def _execute_query(state: NL2SQLState) -> NL2SQLState:
-        return execute_query(state, db_connection, llm, prompt_manager)
+        return execute_query(state, db_connection)
 
     def _format_results(state: NL2SQLState) -> NL2SQLState:
         state = format_results(state, llm, prompt_manager)

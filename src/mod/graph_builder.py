@@ -4,7 +4,7 @@ from langgraph.checkpoint.memory import MemorySaver
 from graph_utils import analyze_schema, select_relevant_tables, generate_sql, execute_query, format_results, explain_query
 from prompts import PromptManager
 from db_connect import DatabaseConnection
-from llm import setup_llm
+from mod.together_llm import setup_llm
 
 
 # Define state with memory

@@ -4,13 +4,15 @@ from graph import build_graph
 from state_schema import NL2SQLState
 from prompts import PromptManager
 from db_connect import DatabaseConnection
-from llm import LLMSetup
+from groq_llm import setup_groq_llms
 
 load_dotenv()
 
 def main():
     # Initialize components
-    together_api_key = os.getenv('TOGETHER_API_KEY')
+    groq_api_key = os.getenv('GROQ_API_KEY')
+    coding_model = os.getenv('SQL_MODEL')
+    chat_model = os.getenv('CHAT_SCOUT')
     db_type = os.getenv('DB_TYPE')
     db_host = os.getenv('DB_HOST')
     db_port = int(os.getenv('DB_PORT')) if os.getenv('DB_PORT') else None
@@ -18,8 +20,8 @@ def main():
     db_user = os.getenv('DB_USER')
     db_password = os.getenv('DB_PASSWORD')
     
-    # Setup LLM
-    llm = LLMSetup(together_api_key)
+    # Setup LLMs
+    coding_llm, chat_llm = setup_groq_llms(groq_api_key, coding_model, chat_model)
     
     # Setup database connection
     db_connection = DatabaseConnection()
@@ -34,7 +36,7 @@ def main():
     prompt_manager = PromptManager()
     
     # Build the graph
-    workflow = build_graph(prompt_manager, db_connection, llm)
+    workflow = build_graph(prompt_manager, db_connection, coding_llm)
     
     # Use a consistent thread_id to maintain conversation history
     thread_config = {"configurable": {"thread_id": "user_session_1"}}
@@ -46,7 +48,8 @@ def main():
     while True:
         # Get user question
         # user_question = input("\nEnter your question: ").strip()
-        user_question = "Tell me the number of employees hired after the year 1999"
+        # user_question = "Tell me the number of employees hired after the year 1999"
+        user_question = "Find the average current salary of employees in each department."
         
         # Check for exit conditions
         if user_question.lower() in ['quit', 'exit']:

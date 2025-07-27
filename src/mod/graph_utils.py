@@ -6,7 +6,7 @@ from sqlalchemy import text
 from db_connect import DatabaseConnection
 from prompts import PromptManager
 from graph_builder import NL2SQLState
-from llm import setup_llm
+from mod.together_llm import setup_llm
 
 
 def analyze_schema(state: NL2SQLState, 
