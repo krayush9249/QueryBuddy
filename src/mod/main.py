@@ -4,15 +4,18 @@ from graph import build_graph
 from state_schema import NL2SQLState
 from prompts import PromptManager
 from db_connect import DatabaseConnection
-from groq_llm import setup_groq_llms
+from llms import setup_groq_llm, setup_together_chat_llm, setup_together_code_llm
 
 load_dotenv()
 
 def main():
     # Initialize components
     groq_api_key = os.getenv('GROQ_API_KEY')
-    coding_model = os.getenv('SQL_MODEL')
-    chat_model = os.getenv('CHAT_SCOUT')
+    groq_model = os.getenv('SQL_GROQ_MODEL')
+
+    # together_api_key = os.getenv('TOGETHER_API_KEY')
+    # togther_model = os.getenv('SQL_TOGETHER_MODEL')
+
     db_type = os.getenv('DB_TYPE')
     db_host = os.getenv('DB_HOST')
     db_port = int(os.getenv('DB_PORT')) if os.getenv('DB_PORT') else None
@@ -21,7 +24,9 @@ def main():
     db_password = os.getenv('DB_PASSWORD')
     
     # Setup LLMs
-    coding_llm, chat_llm = setup_groq_llms(groq_api_key, coding_model, chat_model)
+    llm = setup_groq_llm(groq_api_key, groq_model)
+    #llm = setup_together_chat_llm(together_api_key, togther_model)
+    #llm = setup_together_code_llm(together_api_key, togther_model)
     
     # Setup database connection
     db_connection = DatabaseConnection()
@@ -36,7 +41,7 @@ def main():
     prompt_manager = PromptManager()
     
     # Build the graph
-    workflow = build_graph(prompt_manager, db_connection, coding_llm)
+    workflow = build_graph(prompt_manager, db_connection, llm)
     
     # Use a consistent thread_id to maintain conversation history
     thread_config = {"configurable": {"thread_id": "user_session_1"}}
