@@ -39,7 +39,7 @@ class NL2SQLPrompts:
         Prompt for generating SQL query from natural language question
         """
         template = """
-        You are an expert SQL query generator. Create a precise SQL SELECT query based on the user's question. Use proper SQL syntax and formatting.
+        You are an expert SQL query generator. Create a precise SQL SELECT query based on the user's question.
 
         Database Schema:
         {schema}
@@ -50,8 +50,9 @@ class NL2SQLPrompts:
 
         CRITICAL RULES:
         1. Generate ONLY SELECT queries - no INSERT, UPDATE, DELETE, or ALTER statements
-        2. You must respond with a valid JSON object in this exact format: {{"sql_query": "YOUR_SQL_QUERY_HERE"}}
-        3. Do not include any thinking steps, explanations, markdowns or additional text outside the JSON.
+        2. Use only {sql_dialect} specific syntax and functions.
+        3. You must respond with a valid JSON object in this exact format: {{"sql_query": "YOUR_SQL_QUERY_HERE"}}
+        4. Do not include any thinking steps, explanations, markdowns or additional text outside the JSON.
 
         Example:
         {{"sql_query": "SELECT emp_no, first_name FROM employees WHERE hire_date > '2000-01-01';"}}
@@ -59,7 +60,7 @@ class NL2SQLPrompts:
         SQL Query:"""
         
         return PromptTemplate(
-            input_variables=["question", "schema", "tables"],
+            input_variables=["question", "schema", "tables", "sql_dialect"],
             template=template
         )
     

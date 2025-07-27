@@ -69,6 +69,7 @@ def main():
         # Create state for current question
         current_state = NL2SQLState(
             question=user_question,
+            sql_dialect=db_type,
             db_schema="",
             relevant_tables=[],
             sql_query="",

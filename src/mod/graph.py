@@ -126,7 +126,8 @@ def generate_sql(state: NL2SQLState,
         raw_response = chain.invoke({
             "question": state["question"],
             "schema": state["db_schema"],
-            "tables": ", ".join(state["relevant_tables"])
+            "tables": ", ".join(state["relevant_tables"]),
+            "sql_dialect": state['sql_dialect']
         })
         
         # Use validator to parse and validate the response
