@@ -4,7 +4,7 @@ from graph import build_graph
 from state_schema import NL2SQLState
 from prompts import PromptManager
 from db_connect import DatabaseConnection
-from llms import setup_groq_llm, setup_together_chat_llm, setup_together_code_llm
+from llms import setup_groq_llm, setup_together_llm
 
 load_dotenv()
 
@@ -13,8 +13,8 @@ def main():
     groq_api_key = os.getenv('GROQ_API_KEY')
     groq_model = os.getenv('SQL_GROQ_MODEL')
 
-    # together_api_key = os.getenv('TOGETHER_API_KEY')
-    # togther_model = os.getenv('SQL_TOGETHER_MODEL')
+    together_api_key = os.getenv('TOGETHER_API_KEY')
+    togther_model = os.getenv('SQL_TOGETHER_MODEL')
 
     db_type = os.getenv('DB_TYPE')
     db_host = os.getenv('DB_HOST')
@@ -24,10 +24,18 @@ def main():
     db_password = os.getenv('DB_PASSWORD')
     
     # Setup LLMs
-    llm = setup_groq_llm(groq_api_key, groq_model)
-    #llm = setup_together_chat_llm(together_api_key, togther_model)
-    #llm = setup_together_code_llm(together_api_key, togther_model)
-    
+    print("Choose your preferred API for LLM support:")
+    print("1. Groq")
+    print("2. Together AI")
+
+    choice = int(input("Enter your choice (1 or 2): ").strip())
+    if choice == 1:
+        llm = setup_groq_llm(groq_api_key, groq_model)
+    elif choice == 2:
+        llm = setup_together_llm(together_api_key, togther_model)
+    else:
+        print("Invalid choice. Please enter 1 or 2.")
+
     # Setup database connection
     db_connection = DatabaseConnection()
     db_connection.connect_to_database(db_type, db_host, db_port, db_name, db_user, db_password)
@@ -52,9 +60,9 @@ def main():
     # Main conversation loop
     while True:
         # Get user question
-        # user_question = input("\nEnter your question: ").strip()
+        user_question = input("\nEnter your question: ").strip()
         #user_question = "Tell me the number of employees hired after the year 1999"
-        user_question = "Find the average current salary of employees in each department."
+        #user_question = "Find the average current salary of employees in each department."
         
         # Check for exit conditions
         if user_question.lower() in ['quit', 'exit']:
