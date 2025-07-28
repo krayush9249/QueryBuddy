@@ -2,6 +2,7 @@ ipykernel
 pandas
 dotenv
 python-dotenv
+pydantic
 pymysql
 psycopg2-binary 
 pyodbc
@@ -18,3 +19,5 @@ langchain_experimental
 langchain-together
 together
 streamlit
+streamlit-ace
+watchdog
