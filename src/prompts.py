@@ -87,7 +87,6 @@ class NL2SQLPrompts:
         4. Filters or conditions applied (WHERE clauses)
         5. Any grouping, sorting, or limiting applied
         6. How the query answers the original question
-        7. Any assumptions made in the query logic
 
         Keep the explanation conversational and easy to understand.
 
