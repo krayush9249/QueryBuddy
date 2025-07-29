@@ -34,6 +34,9 @@ A secure, multi-database **Text-to-SQL** application built using **LangChain** a
 * **Groq LLMs**
 * **Together AI LLMs**
 
-## 📦 Deployment
+## 🌐 Live Demo
 
-The app is deployed on **Streamlit Cloud**, providing a fast, secure, and interactive environment for real-time use.
+Try the app live on **Streamlit Cloud**:
+👉 [**query-buddy.streamlit.app**](https://query-buddy.streamlit.app/)
+
+[![Open in Streamlit](https://static.streamlit.io/badges/streamlit_badge_black_white.svg)](https://query-buddy.streamlit.app/)
