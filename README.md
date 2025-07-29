@@ -1,4 +1,4 @@
-# 🧠 Text-to-SQL App
+# 🤖 QueryBuddy
 
 A secure, multi-database **Text-to-SQL** application built using **LangChain** and **LangGraph**, designed to transform natural language questions into SQL queries with real-time execution.
 
@@ -22,7 +22,7 @@ A secure, multi-database **Text-to-SQL** application built using **LangChain** a
 * 🌐 **Real-Time Query Execution**
   Execute SQL queries directly on connected databases via a Streamlit Cloud interface.
 
-* 🤖 **LLM Support**
+* 🧠 **LLM Support**
   Compatible with **Groq** and **Together AI** language models for fast and accurate query generation.
 
 ## 🛠 Tech Stack
