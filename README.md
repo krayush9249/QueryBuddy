@@ -29,8 +29,9 @@ A secure, multi-database **Text-to-SQL** application built using **LangChain** a
 
 * **LangChain**
 * **LangGraph**
-* **Streamlit**
+* **SQLAlchemy**
 * **Pydantic**
+* **Streamlit**
 * **Groq LLMs**
 * **Together AI LLMs**
 
